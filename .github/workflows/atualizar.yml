@@ -1,0 +1,30 @@
+name: Atualização Automática dos Dados do Trends
+
+on:
+  schedule:
+    # Executa todos os dias às 03:00 da manhã (Horário de Brasília)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  atualizar-dados:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Baixar Repositório
+      uses: actions/checkout@v3
+
+    - name: Configurar ambiente Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Executar Script de Atualização
+      run: python atualizar_trends.py
+
+    - name: Salvar alterações no Repositório
+      run: |
+        git config --global user.name "GitHub Action Bot"
+        git config --global user.email "actions@github.com"
+        git add .
+        git diff --staged --quiet || (git commit -m "🔄 [BOT] Atualização automática dos arquivos CSV" && git push)
