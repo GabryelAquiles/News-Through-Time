@@ -27,7 +27,7 @@ jobs:
       # 3. Executa o script Python passando a chave da API com segurança via Secret
       - name: Executar Script Python
         env:
-          GEMINI_API_KEY: ${{ AQ.Ab8RN6Kr5IqhhGNsE79Y_W9o3TA_9A3479cKDQz2CApCXSwoNw.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python atualizar_trends.py
 
       # 4. Faz o commit e o push dos novos arquivos CSV para o repositório
