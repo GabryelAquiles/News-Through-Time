@@ -1,14 +1,13 @@
 import os
 import json
-import csv
 import urllib.request
-import urllib.parse
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
-# URL da API do Google Trends
+# Feeds RSS oficiais e estáveis do Google Trends
 URLS = {
-    "BR": "https://trends.google.com.br/trends/api/dailytrends?hl=pt-BR&tz=180&geo=BR",
-    "US": "https://trends.google.com/trends/api/dailytrends?hl=en-US&tz=300&geo=US"
+    "BR": "https://trends.google.com/trending/rss?geo=BR",
+    "US": "https://trends.google.com/trending/rss?geo=US"
 }
 
 ARQUIVOS_DESTINO = {
@@ -16,42 +15,40 @@ ARQUIVOS_DESTINO = {
     "US": "trending_US_latest.csv"
 }
 
-# Pega a chave da API do Gemini configurada nas variáveis de ambiente do GitHub
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-def obter_dados_brutos(url):
-    """Baixa o JSON bruto do Google Trends"""
+def obter_dados_brutos_rss(url):
+    """Baixa o RSS oficial do Google Trends"""
     try:
         req = urllib.request.Request(
             url, 
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         )
         with urllib.request.urlopen(req) as response:
-            raw_text = response.read().decode('utf-8')
-            return raw_text.replace(")]}'\n", "").strip()
+            return response.read().decode('utf-8')
     except Exception as e:
-        print(f"❌ Erro ao baixar dados da URL {url}: {e}")
+        print(f"❌ Erro ao baixar RSS da URL {url}: {e}")
         return None
 
-def processar_com_gemini(json_texto, pais):
-    """Envia os dados brutos para o Gemini limpar e formatar em CSV de 2 colunas"""
+def processar_com_gemini(xml_texto, pais):
+    """Envia o XML do RSS para o Gemini extrair e formatar em CSV de 2 colunas"""
     if not GEMINI_API_KEY:
         print("⚠️ GEMINI_API_KEY não encontrada. Usando processamento local...")
-        return processar_localmente(json_texto)
+        return processar_localmente_xml(xml_texto)
 
     url_gemini = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     prompt = (
-        "Você é um assistente de dados. Analise o JSON bruto do Google Trends abaixo e extraia "
-        "apenas os termos buscados e seus respectivos volumes de pesquisa.\n"
+        "Você é um assistente de dados. Analise o XML RSS do Google Trends abaixo e extraia "
+        "apenas os títulos das tendências e o volume estimado de buscas (approx_traffic).\n"
         "REGRAS ESTRITAS:\n"
         "1. Retorne APENAS um texto no formato CSV válido com exatamente 2 colunas: Tendências,Volume de pesquisa\n"
         "2. Não inclua marcas de bloco de código como ```csv ou ```.\n"
-        "3. Remova quebras de linha dentro dos nomes das tendências.\n"
-        "4. Mantenha os volumes no formato exato como '100 mil+', '1 mi+', '50 mil+', etc.\n"
-        "5. Não adicione nenhuma explicação, introdução ou texto além do próprio CSV.\n\n"
-        f"DADOS BRUTOS DO GOOGLE TRENDS ({pais}):\n"
-        f"{json_texto[:15000]}" # Limita tamanho para a requisição
+        "3. Remova quebras de linha e vírgulas internas do nome dos termos.\n"
+        "4. Mantenha os volumes no formato original (ex: '100.000+', '1.000.000+').\n"
+        "5. Não adicione nenhuma explicação ou introdução, apenas o CSV.\n\n"
+        f"DADOS BRUTOS RSS ({pais}):\n"
+        f"{xml_texto[:15000]}"
     )
 
     payload = {
@@ -69,24 +66,32 @@ def processar_com_gemini(json_texto, pais):
             csv_result = res_data['candidates'][0]['content']['parts'][0]['text'].strip()
             return csv_result
     except Exception as e:
-        print(f"⚠️ Falha na chamada da API Gemini: {e}. Usando fallback local...")
-        return processar_localmente(json_texto)
+        print(f"⚠️ Falha no Gemini: {e}. Usando fallback local...")
+        return processar_localmente_xml(xml_texto)
 
-def processar_localmente(json_texto):
-    """Fallback simples em Python caso a API do Gemini falhe"""
+def processar_localmente_xml(xml_texto):
+    """Fallback local para ler o XML caso o Gemini não responda"""
     try:
-        data = json.loads(json_texto)
+        root = ET.fromstring(xml_texto)
+        channel = root.find('channel')
         linhas = ["Tendências,Volume de pesquisa"]
-        days = data.get("default", {}).get("trendingSearchesDays", [])
-        for day in days:
-            for item in day.get("trendingSearches", []):
-                termo = item.get("title", {}).get("query", "").replace("\n", " ").replace(",", " ").strip()
-                volume = item.get("formattedTraffic", "100+").replace("\n", " ").strip()
-                if termo:
-                    linhas.append(f'"{termo}","{volume}"')
+        
+        # Namespace do Google Trends para pegar o tráfego aproximado
+        ns = {'ht': 'https://trends.google.com/trending/rss'}
+        
+        for item in channel.findall('item'):
+            title = item.find('title')
+            traffic = item.find('ht:approx_traffic', ns)
+            
+            termo = title.text.replace("\n", " ").replace(",", " ").strip() if title is not None else ""
+            vol = traffic.text.replace("\n", " ").strip() if traffic is not None else "100.000+"
+            
+            if termo:
+                linhas.append(f'"{termo}","{vol}"')
+                
         return "\n".join(linhas)
     except Exception as e:
-        print(f"❌ Erro no processamento local: {e}")
+        print(f"❌ Erro no processamento local de XML: {e}")
         return ""
 
 def salvar_csv(conteudo_csv, caminho_arquivo):
@@ -96,13 +101,13 @@ def salvar_csv(conteudo_csv, caminho_arquivo):
 
     with open(caminho_arquivo, "w", encoding="utf-8") as f:
         f.write(conteudo_csv)
-    print(f"✅ Ficheiro {caminho_arquivo} atualizado com sucesso!")
+    print(f"✅ Arquivo {caminho_arquivo} atualizado com sucesso!")
 
 if __name__ == "__main__":
-    print(f"🚀 [BOT] Iniciando atualização via Gemini em {datetime.now()}")
+    print(f"🚀 [BOT] Iniciando atualização via RSS + Gemini em {datetime.now()}")
     
     for pais, url in URLS.items():
-        json_bruto = obter_dados_brutos(url)
-        if json_bruto:
-            csv_limpo = processar_com_gemini(json_bruto, pais)
+        xml_bruto = obter_dados_brutos_rss(url)
+        if xml_bruto:
+            csv_limpo = processar_com_gemini(xml_bruto, pais)
             salvar_csv(csv_limpo, ARQUIVOS_DESTINO[pais])
