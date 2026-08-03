@@ -17,7 +17,7 @@ ARQUIVOS_DESTINO = {
 }
 
 # Pega a chave da API do Gemini configurada nas variáveis de ambiente do GitHub
-GEMINI_API_KEY = os.environ.get("AQ.Ab8RN6Kr5IqhhGNsE79Y_W9o3TA_9A3479cKDQz2CApCXSwoNw")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def obter_dados_brutos(url):
     """Baixa o JSON bruto do Google Trends"""
