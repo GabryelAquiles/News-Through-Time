@@ -26,9 +26,7 @@ jobs:
         run: pip install google-genai
 
       # Executa o script passando a chave dos Secrets
-      - name: Executar Script Python
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
         run: python atualizar_trends.py
 
       - name: Salvar alterações no GitHub
