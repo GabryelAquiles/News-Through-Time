@@ -21,10 +21,17 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Instala a SDK oficial do Gemini
+      #  Instala a SDK oficial do Gemini
       - name: Instalar Dependências
         run: pip install google-genai
 
+      #  Executa o script Python passando a API Key do Gemini
+      - name: Executar Script Python
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python atualizar_trends.py
+
+      #  Salva os novos arquivos CSV atualizados no GitHub
       - name: Salvar alterações no GitHub
         run: |
           git config --global user.name "github-actions[bot]"
