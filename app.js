@@ -12,6 +12,7 @@ import {
   serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
   apiKey: "AIzaSyBXp2SKVdVdOjbX1Qu8PoIQRskuO0IJIwo",
   authDomain: "news-through-time-53bd9.firebaseapp.com",
@@ -27,24 +28,19 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-const GITHUB_USER = "GabryelAquiles";
-const GITHUB_REPO = "News-Through-Time"; 
-const CSV_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/trending_BR_latest.csv`;
-
-const GEMINI_API_KEY = "AQ.Ab8RN6IOpiRO-WqW3NgO0UNI0cggkdTHUK_E6xhMS8KOf_f3Jg";
-
+// --- ELEMENTOS DO DOM ---
 const btnGoogle = document.getElementById('btn-google');
-const btnResumo = document.getElementById('btn-resumo'); 
-const messageDiv = document.getElementById('message');
-const elResumoTexto = document.getElementById('resumo-texto');
-const containerResumo = document.getElementById('resumo-container');
+const messageDiv = document.getElementById('mensagem');
 
+// --- VERIFICA SE O USUÁRIO JÁ ESTÁ AUTENTICADO ---
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    console.log("Usuário autenticado:", user.displayName);
+    // Se o usuário já estiver logado, vai direto para a página principal
+    window.location.href = "home.html";
   }
 });
 
+// --- CLIQUE NO BOTÃO DE LOGIN ---
 btnGoogle.addEventListener('click', async () => {
   clearMessage();
 
@@ -52,11 +48,15 @@ btnGoogle.addEventListener('click', async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
+    // Salva ou atualiza os dados do usuário no Firestore
     await salvarUsuarioNoBanco(user);
 
-    showMessage(`Bem-vindo(a), ${user.displayName}! Buscando resumo de tendências...`, 'success');
+    showMessage(`Bem-vindo(a), ${user.displayName}! Redirecionando...`, 'success');
 
-    await carregarEGerarResumoIA();
+    // Aguarda um pequeno intervalo e redireciona para o painel principal
+    setTimeout(() => {
+      window.location.href = "home.html";
+    }, 1000);
 
   } catch (error) {
     if (error.code === 'auth/popup-closed-by-user') {
@@ -64,10 +64,11 @@ btnGoogle.addEventListener('click', async () => {
     } else {
       showMessage("Erro ao fazer login com o Google.", 'error');
     }
-    console.error(error);
+    console.error("Erro na autenticação:", error);
   }
 });
 
+// --- SALVAR/ATUALIZAR DADOS DO USUÁRIO ---
 async function salvarUsuarioNoBanco(user) {
   const userRef = doc(db, "usuarios", user.uid);
   
@@ -78,53 +79,6 @@ async function salvarUsuarioNoBanco(user) {
     foto: user.photoURL,
     ultimoAcesso: serverTimestamp()
   }, { merge: true }); 
-}
-
-async function carregarEGerarResumoIA() {
-  try {
-    const respostaCsv = await fetch(CSV_URL);
-    if (!respostaCsv.ok) throw new Error("Não foi possível carregar os dados das tendências.");
-    const textoCsv = await respostaCsv.text();
-
-    showMessage("Analisando as tendências com Inteligência Artificial...", "success");
-
-    const resumo = await gerarResumoGemini(textoCsv);
-
-    if (elResumoTexto && containerResumo) {
-      elResumoTexto.innerText = resumo;
-      containerResumo.style.display = "block";
-    }
-
-  } catch (erro) {
-    console.error("Erro no processamento da IA:", erro);
-    showMessage(`Aviso: Login efetuado, mas erro ao gerar resumo IA.`, 'error');
-  }
-}
-
-async function gerarResumoGemini(dadosCsv) {
-  const urlApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-  const prompt = `Analise os dados extraídos do Google Trends (Brasil) abaixo (contendo Tendências, Volume e Tempo decorrido) e gere um resumo compacto destacando os 3 principais assuntos mais relevantes no momento, explicando o contexto resumidamente.\n\nDADOS DO CSV:\n${dadosCsv}`;
-
-  const payload = {
-    contents: [{
-      parts: [{ text: prompt }]
-    }]
-  };
-
-  const resposta = await fetch(urlApi, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  if (!resposta.ok) {
-    const dadosErro = await resposta.json();
-    throw new Error(dadosErro.error?.message || "Falha na API do Gemini.");
-  }
-
-  const dados = await resposta.json();
-  return dados.candidates[0].content.parts[0].text;
 }
 
 function showMessage(text, type) {
