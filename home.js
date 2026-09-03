@@ -22,7 +22,7 @@ const auth = getAuth(app);
 // --- GITHUB & GEMINI CONFIG ---
 const GITHUB_USER = "GabryelAquiles";
 const GITHUB_REPO = "News-Through-Time";
-const GEMINI_API_KEY = "AQ.Ab8RN6IJn0mpaD8Nm6-BPES077AAt0wKiDpwrCQaYO9iQydDHA"; 
+const GEMINI_API_KEY = "AQ.Ab8RN6Lk60gcHb82XvqQ07gwA57TV4FfwqWwycu9fRZgz0-zlw"; 
 
 // --- ELEMENTOS DO DOM ---
 const userPhoto = document.getElementById('user-photo');
@@ -143,8 +143,7 @@ function renderizarTop10(itens) {
 
 // Chama a API do Gemini enviando apenas o Top 10
 async function gerarResumoGemini(top10List, pais) {
-  // Ajuste de Sintaxe: Usando a constante GEMINI_API_KEY corretamente
-  const urlApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AQ.Ab8RN6JbnzbzoQtXE51lLB7ZKc0TcHkYyO59mBUx2t8mSy8wGQ}`;
+  const urlApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const prompt = `Você é um analista de dados. Analise estas 10 maiores tendências de busca do Google Trends no ${pais} e faça um resumo conciso (em 3 parágrafos curtos) explicando o contexto geral do que as pessoas estão buscando agora:\n\n` + 
     top10List.map((t, i) => `${i+1}. ${t.termo} (${t.volume})`).join('\n');
