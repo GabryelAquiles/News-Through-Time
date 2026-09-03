@@ -84,7 +84,7 @@ btnAnalisar.addEventListener('click', async () => {
     const top10 = processarTop10(csvData);
     renderizarTop10(top10);
 
-    // 3. Gerar Resumo via IA (OpenRouter)
+    // 3. Gerar Resumo via IA
     mostrarStatus("Analisando com Inteligência Artificial...", "info");
     const resumo = await gerarResumoIA(top10, pais);
     
@@ -117,7 +117,7 @@ function processarTop10(csvText) {
   return lista;
 }
 
-// Renderiza os 10 itens como links direcionando para a pesquisa do Google
+// Renderiza os 10 itens na lista HTML com links para o Google
 function renderizarTop10(itens) {
   trendsList.innerHTML = '';
   
@@ -130,7 +130,7 @@ function renderizarTop10(itens) {
     const li = document.createElement('li');
     li.className = 'trend-item';
 
-    // Cria a URL de busca direta no Google com o termo formatado
+    // Cria a URL de pesquisa direta no Google
     const termoEncoded = encodeURIComponent(item.termo);
     const googleSearchUrl = `https://www.google.com/search?q=${termoEncoded}`;
 
@@ -148,7 +148,7 @@ function renderizarTop10(itens) {
   });
 }
 
-// Chama a API do OpenRouter para gerar o resumo do Top 10
+// Chama a API do OpenRouter enviando o Top 10 para o modelo gratuito Gemini 2.0 Flash Exp
 async function gerarResumoIA(top10List, pais) {
   const prompt = `Você é um analista de dados. Analise estas 10 maiores tendências de busca do Google Trends no ${pais} e faça um resumo conciso (em 3 parágrafos curtos) explicando o contexto geral do que as pessoas estão buscando agora:\n\n` + 
     top10List.map((t, i) => `${i+1}. ${t.termo} (${t.volume})`).join('\n');
@@ -160,7 +160,7 @@ async function gerarResumoIA(top10List, pais) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "meta-llama/llama-3.3-70b-instruct:free",
+      model: "google/gemini-2.0-flash-exp:free",
       messages: [{ role: "user", content: prompt }]
     })
   });
