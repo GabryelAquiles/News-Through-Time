@@ -19,10 +19,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// --- GITHUB & OPENROUTER CONFIG ---
+// --- CONFIGURAÇÃO DO BACKEND ---
+// Substitua pelo link real gerado pelo Render após o deploy
+const BACKEND_URL = "https://seu-app-python.onrender.com"; 
+
 const GITHUB_USER = "GabryelAquiles";
 const GITHUB_REPO = "News-Through-Time";
-const OPENROUTER_API_KEY = "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"; 
 
 // --- ELEMENTOS DO DOM ---
 const userPhoto = document.getElementById('user-photo');
@@ -75,7 +77,7 @@ btnAnalisar.addEventListener('click', async () => {
   mostrarStatus("Buscando dados das tendências...", "info");
 
   try {
-    // 1. Puxar CSV do GitHub
+    // 1. Puxar CSV do GitHub para renderizar a lista na interface
     const res = await fetch(csvUrl);
     if (!res.ok) throw new Error("Não foi possível carregar o arquivo de dados.");
     const csvData = await res.text();
@@ -84,9 +86,9 @@ btnAnalisar.addEventListener('click', async () => {
     const top10 = processarTop10(csvData);
     renderizarTop10(top10);
 
-    // 3. Gerar Resumo via IA
-    mostrarStatus("Analisando com Inteligência Artificial...", "info");
-    const resumo = await gerarResumoIA(top10, pais);
+    // 3. Gerar Resumo via Backend em Python (Render)
+    mostrarStatus("Cruzando dados com a base sociológica via IA...", "info");
+    const resumo = await obterResumoDoBackend(pais);
     
     resumoText.innerText = resumo;
     ocultarStatus();
@@ -148,30 +150,17 @@ function renderizarTop10(itens) {
   });
 }
 
-// Chama a API do OpenRouter enviando o Top 10 para o modelo gratuito Gemini 2.0 Flash Exp
-async function gerarResumoIA(top10List, pais) {
-  const prompt = `Você é um analista de dados. Analise estas 10 maiores tendências de busca do Google Trends no ${pais} e faça um resumo conciso (em 3 parágrafos curtos) explicando o contexto geral do que as pessoas estão buscando agora:\n\n` + 
-    top10List.map((t, i) => `${i+1}. ${t.termo} (${t.volume})`).join('\n');
-
-  const resposta = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.0-flash-exp:free",
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
+// Faz a requisição segura para o seu servidor FastAPI no Render
+async function obterResumoDoBackend(pais) {
+  const resposta = await fetch(`${BACKEND_URL}/analisar/${pais}`);
 
   if (!resposta.ok) {
-    const err = await resposta.json();
-    throw new Error(err.error?.message || "Erro na resposta da IA.");
+    const err = await resposta.json().catch(() => ({}));
+    throw new Error(err.detail || "Erro ao conectar com o servidor de IA.");
   }
 
   const data = await resposta.json();
-  return data.choices[0].message.content;
+  return data.resumo;
 }
 
 function mostrarStatus(texto, tipo) {
