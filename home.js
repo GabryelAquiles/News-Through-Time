@@ -19,10 +19,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// --- CONFIGURAÇÃO DO BACKEND ---
-// Substitua pelo link real gerado pelo Render após o deploy
-const BACKEND_URL = "https://seu-app-python.onrender.com"; 
-
+// --- CONFIGURAÇÃO GITHUB ---
 const GITHUB_USER = "GabryelAquiles";
 const GITHUB_REPO = "News-Through-Time";
 
@@ -37,7 +34,10 @@ const selectPais = document.getElementById('select-pais');
 const btnAnalisar = document.getElementById('btn-analisar');
 const statusMsg = document.getElementById('status-msg');
 const trendsList = document.getElementById('trends-list');
-const resumoText = document.getElementById('resumo-text');
+
+// Instâncias para controle e atualização dos gráficos
+let chartMesInstance = null;
+let chartAtualInstance = null;
 
 // --- CONTROLE DE AUTENTICAÇÃO ---
 onAuthStateChanged(auth, (user) => {
@@ -47,7 +47,6 @@ onAuthStateChanged(auth, (user) => {
       userPhoto.src = user.photoURL;
     }
   } else {
-    // Redireciona para o login se não estiver autenticado
     window.location.href = "index.html";
   }
 });
@@ -74,23 +73,25 @@ btnAnalisar.addEventListener('click', async () => {
   const csvUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/trending_${pais}_latest.csv`;
 
   btnAnalisar.disabled = true;
-  mostrarStatus("Buscando dados das tendências...", "info");
+  mostrarStatus("Carregando tendências e gerando gráficos...", "info");
 
   try {
-    // 1. Puxar CSV do GitHub para renderizar a lista na interface
     const res = await fetch(csvUrl);
-    if (!res.ok) throw new Error("Não foi possível carregar o arquivo de dados.");
+    if (!res.ok) throw new Error("Não foi possível carregar o arquivo de dados do GitHub.");
     const csvData = await res.text();
 
-    // 2. Extrair e Exibir os 10 primeiros resultados
-    const top10 = processarTop10(csvData);
-    renderizarTop10(top10);
+    const todosItens = processarCSV(csvData);
+    const top10Recentes = todosItens.slice(0, 10);
 
-    // 3. Gerar Resumo via Backend em Python (Render)
-    mostrarStatus("Cruzando dados com a base sociológica via IA...", "info");
-    const resumo = await obterResumoDoBackend(pais);
-    
-    resumoText.innerText = resumo;
+    // Ordena os itens por volume para identificar os maiores do mês
+    const top10Mes = [...todosItens]
+      .sort((a, b) => b.valorNumerico - a.valorNumerico)
+      .slice(0, 10);
+
+    renderizarTop10(top10Recentes);
+    renderizarGraficoMes(top10Mes);
+    renderizarGraficoAtual(top10Recentes);
+
     ocultarStatus();
 
   } catch (err) {
@@ -101,25 +102,42 @@ btnAnalisar.addEventListener('click', async () => {
   }
 });
 
-// Processa o CSV e isola apenas os 10 primeiros itens
-function processarTop10(csvText) {
+// Processa o CSV completo convertendo strings de volume em inteiros
+function processarCSV(csvText) {
   const linhas = csvText.trim().split('\n').slice(1);
   const lista = [];
 
-  for (let i = 0; i < Math.min(linhas.length, 10); i++) {
-    const colunas = linhas[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || linhas[i].split(',');
+  linhas.forEach(linha => {
+    const colunas = linha.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || linha.split(',');
     if (colunas.length >= 2) {
+      const termo = colunas[0]?.replace(/"/g, '').trim();
+      const volumeStr = colunas[1]?.replace(/"/g, '').trim() || '0';
+      const tempo = colunas[2]?.replace(/"/g, '').trim() || 'recente';
+
       lista.push({
-        termo: colunas[0]?.replace(/"/g, '').trim(),
-        volume: colunas[1]?.replace(/"/g, '').trim(),
-        tempo: colunas[2]?.replace(/"/g, '').trim() || 'recente'
+        termo: termo,
+        volume: volumeStr,
+        valorNumerico: converterVolume(volumeStr),
+        tempo: tempo
       });
     }
-  }
+  });
+
   return lista;
 }
 
-// Renderiza os 10 itens na lista HTML com links para o Google
+// Converte valores formatados ex: "100K+", "1M+" em números utilizáveis pelo gráfico
+function converterVolume(volStr) {
+  const limpo = volStr.toUpperCase().replace(/\+/g, '').replace(/\./g, '').replace(/,/g, '.').trim();
+  if (limpo.includes('K')) {
+    return parseFloat(limpo.replace('K', '')) * 1000;
+  } else if (limpo.includes('M')) {
+    return parseFloat(limpo.replace('M', '')) * 1000000;
+  }
+  return parseFloat(limpo) || 0;
+}
+
+// Renderiza a lista das 10 buscas recentes
 function renderizarTop10(itens) {
   trendsList.innerHTML = '';
   
@@ -132,7 +150,6 @@ function renderizarTop10(itens) {
     const li = document.createElement('li');
     li.className = 'trend-item';
 
-    // Cria a URL de pesquisa direta no Google
     const termoEncoded = encodeURIComponent(item.termo);
     const googleSearchUrl = `https://www.google.com/search?q=${termoEncoded}`;
 
@@ -150,17 +167,95 @@ function renderizarTop10(itens) {
   });
 }
 
-// Faz a requisição segura para o seu servidor FastAPI no Render
-async function obterResumoDoBackend(pais) {
-  const resposta = await fetch(`${BACKEND_URL}/analisar/${pais}`);
+// --- GRÁFICO 1: MAIORES DO MÊS (Barras Horizontais) ---
+function renderizarGraficoMes(itens) {
+  const canvas = document.getElementById('graficoMes');
+  if (!canvas) return;
 
-  if (!resposta.ok) {
-    const err = await resposta.json().catch(() => ({}));
-    throw new Error(err.detail || "Erro ao conectar com o servidor de IA.");
-  }
+  if (chartMesInstance) chartMesInstance.destroy();
 
-  const data = await resposta.json();
-  return data.resumo;
+  const ctx = canvas.getContext('2d');
+
+  chartMesInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: itens.map(item => item.termo),
+      datasets: [{
+        label: 'Volume Estimado no Mês',
+        data: itens.map(item => item.valorNumerico),
+        backgroundColor: 'rgba(92, 127, 145, 0.75)',
+        borderColor: 'rgba(92, 127, 145, 1)',
+        borderWidth: 1.5,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` Volume: ${itens[ctx.dataIndex].volume}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            callback: (val) => val >= 1000000 ? (val / 1000000) + 'M' : (val >= 1000 ? (val / 1000) + 'K' : val)
+          }
+        }
+      }
+    }
+  });
+}
+
+// --- GRÁFICO 2: VOLUME COMPARATIVO (Barras Verticais) ---
+function renderizarGraficoAtual(itens) {
+  const canvas = document.getElementById('graficoAtual');
+  if (!canvas) return;
+
+  if (chartAtualInstance) chartAtualInstance.destroy();
+
+  const ctx = canvas.getContext('2d');
+
+  chartAtualInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: itens.map(item => item.termo),
+      datasets: [{
+        label: 'Volume de Buscas Recente',
+        data: itens.map(item => item.valorNumerico),
+        backgroundColor: 'rgba(174, 198, 207, 0.75)',
+        borderColor: 'rgba(146, 177, 190, 1)',
+        borderWidth: 2,
+        borderRadius: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` Volume: ${itens[ctx.dataIndex].volume}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (val) => val >= 1000000 ? (val / 1000000) + 'M' : (val >= 1000 ? (val / 1000) + 'K' : val)
+          }
+        }
+      }
+    }
+  });
 }
 
 function mostrarStatus(texto, tipo) {
