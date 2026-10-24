@@ -21,7 +21,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 def calcular_tempo_decorrido(pub_date_str):
     """Calcula quanto tempo se passou desde a publicação (ex: 'há 20 minutos', 'há 2 horas')"""
     try:
-        # Exemplo de data no RSS: 'Thu, 06 Aug 2026 14:10:00 +0000' ou 'GMT'
         if 'GMT' in pub_date_str:
             pub_date_str = pub_date_str.replace('GMT', '+0000')
             
@@ -55,7 +54,7 @@ def obter_dados_brutos_rss(url):
         with urllib.request.urlopen(req) as response:
             return response.read().decode('utf-8')
     except Exception as e:
-        print(f" Erro ao baixar RSS da URL {url}: {e}")
+        print(f"❌ Erro ao baixar RSS da URL {url}: {e}")
         return None
 
 def processar_com_gemini(xml_texto, pais):
@@ -64,7 +63,8 @@ def processar_com_gemini(xml_texto, pais):
         print(" GEMINI_API_KEY não encontrada. Usando processamento local...")
         return processar_localmente_xml(xml_texto)
 
-    url_gemini = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Atualizado para o modelo padrão estável da API v1beta
+    url_gemini = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     prompt = (
         "Você é um assistente de dados. Analise o XML RSS do Google Trends abaixo e extraia:\n"
@@ -124,7 +124,7 @@ def processar_localmente_xml(xml_texto):
                 
         return "\n".join(linhas)
     except Exception as e:
-        print(f"❌ Erro no processamento local de XML: {e}")
+        print(f" Erro no processamento local de XML: {e}")
         return ""
 
 def salvar_csv(conteudo_csv, caminho_arquivo):
