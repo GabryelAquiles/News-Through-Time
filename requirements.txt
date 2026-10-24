@@ -3,3 +3,6 @@ uvicorn
 requests
 pandas
 google-generativeai
+firebase-admin
+pandas
+requests
